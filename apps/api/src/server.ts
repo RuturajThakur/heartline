@@ -62,6 +62,9 @@ const uploadsRoot = path.resolve(process.cwd(), "uploads");
 await mkdir(path.join(uploadsRoot, "profile-photos"), {
   recursive: true
 });
+await mkdir(path.join(uploadsRoot, "chat-attachments"), {
+  recursive: true
+});
 
 await app.register(cors, {
   origin: (origin, callback) => {
@@ -141,7 +144,7 @@ app.addHook("onRequest", async (request, reply) => {
 await app.register(multipart, {
   limits: {
     fileSize: 12 * 1024 * 1024,
-    files: 1
+    files: 5
   }
 });
 await app.register(fastifyStatic, {

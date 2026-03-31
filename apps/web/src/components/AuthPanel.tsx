@@ -12,13 +12,13 @@ import {
 type AuthPayload = {
   email: string;
   password: string;
+  confirmPassword?: string;
   name?: string;
   birthDate?: string;
-  city?: string;
 };
 
 const panelClass =
-  "col-span-full rounded-[28px] border border-white/80 bg-[rgba(255,251,246,0.76)] p-7 shadow-[0_28px_70px_rgba(87,49,31,0.18)] backdrop-blur-[14px]";
+  "rounded-[28px] border border-white/80 bg-[rgba(255,251,246,0.76)] p-7 shadow-[0_28px_70px_rgba(87,49,31,0.18)] backdrop-blur-[14px]";
 const labelClass = "mb-2 text-[0.72rem] uppercase tracking-[0.14em] text-[#db5b43]";
 const fieldClass =
   "w-full rounded-2xl border border-[#24162d]/10 bg-white/70 px-4 py-3 text-[#24162d] outline-none transition placeholder:text-[#65556c]/70 focus:border-[#db5b43] focus:ring-2 focus:ring-[#db5b43]/15";
@@ -32,9 +32,9 @@ export function AuthPanel() {
   const [form, setForm] = useState<AuthPayload>({
     email: "",
     password: "",
+    confirmPassword: "",
     name: "",
-    birthDate: "",
-    city: ""
+    birthDate: ""
   });
 
   const sessionQuery = useQuery({
@@ -46,9 +46,18 @@ export function AuthPanel() {
   const authMutation = useMutation({
     mutationFn: async () => {
       if (mode === "register") {
+        if (form.password !== form.confirmPassword) {
+          throw new Error("Passwords do not match.");
+        }
+
         return apiFetch<{ user: SessionUser }>("/api/auth/register", {
           method: "POST",
-          body: JSON.stringify(form)
+          body: JSON.stringify({
+            email: form.email,
+            password: form.password,
+            name: form.name,
+            birthDate: form.birthDate
+          })
         });
       }
 
@@ -121,13 +130,17 @@ export function AuthPanel() {
   }
 
   return (
-    <section className={panelClass}>
+    <section className={`${panelClass} lg:sticky lg:top-8`}>
       <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-center">
         <div>
-          <p className={labelClass}>Auth starter</p>
+          <p className={labelClass}>Get inside</p>
           <h2 className="font-serif text-[clamp(1.8rem,3vw,2.8rem)] leading-tight text-[#24162d]">
-            Cookie session foundation.
+            Login or create your profile.
           </h2>
+          <p className="mt-3 max-w-[42ch] text-sm leading-6 text-[#65556c]">
+            Start with login if you already have an account. Register if you are new and we
+            will take you straight into onboarding.
+          </p>
         </div>
 
         <div className="flex flex-wrap gap-2">
@@ -174,7 +187,7 @@ export function AuthPanel() {
         </div>
       ) : (
         <form
-          className="mt-6 grid gap-5 md:grid-cols-2 md:items-end"
+          className="mt-6 grid max-w-[32rem] gap-5"
           onSubmit={(event) => {
             event.preventDefault();
             authMutation.mutate();
@@ -200,15 +213,6 @@ export function AuthPanel() {
                   value={form.birthDate ?? ""}
                 />
               </label>
-              <label className="grid gap-2 text-sm text-[#65556c]">
-                <span>City</span>
-                <input
-                  className={fieldClass}
-                  onChange={(event) => updateField("city", event.target.value)}
-                  type="text"
-                  value={form.city ?? ""}
-                />
-              </label>
             </>
           ) : null}
 
@@ -232,17 +236,29 @@ export function AuthPanel() {
             />
           </label>
 
+          {mode === "register" ? (
+            <label className="grid gap-2 text-sm text-[#65556c]">
+              <span>Confirm password</span>
+              <input
+                className={fieldClass}
+                onChange={(event) => updateField("confirmPassword", event.target.value)}
+                type="password"
+                value={form.confirmPassword ?? ""}
+              />
+            </label>
+          ) : null}
+
           {authMutation.error ? (
-            <p className="text-sm text-[#b53c27] md:col-span-2">{authMutation.error.message}</p>
+            <p className="text-sm text-[#b53c27]">{authMutation.error.message}</p>
           ) : null}
           {sessionQuery.isError ? (
-            <p className="text-sm text-[#65556c] md:col-span-2">
+            <p className="text-sm text-[#65556c]">
               No active session yet. Register or log in to test auth.
             </p>
           ) : null}
 
           <button
-            className="inline-flex w-fit items-center justify-center rounded-full border border-[#24162d] bg-[#24162d] px-5 py-3 text-sm font-semibold text-white shadow-[0_28px_70px_rgba(87,49,31,0.18)] transition hover:-translate-y-0.5 md:col-span-2"
+            className="inline-flex w-fit items-center justify-center rounded-full border border-[#24162d] bg-[#24162d] px-5 py-3 text-sm font-semibold text-white shadow-[0_28px_70px_rgba(87,49,31,0.18)] transition hover:-translate-y-0.5"
             type="submit"
           >
             {authMutation.isPending

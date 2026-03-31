@@ -24,6 +24,11 @@ const updateAccountSchema = z.object({
   city: z.string().min(2).max(120)
 });
 
+const updateLocationSchema = z.object({
+  latitude: z.number().min(-90).max(90),
+  longitude: z.number().min(-180).max(180)
+});
+
 const changePasswordSchema = z.object({
   currentPassword: z.string().min(8),
   newPassword: z.string().min(8)
@@ -42,6 +47,8 @@ type UserRow = {
   name: string;
   birth_date: string;
   city: string;
+  latitude: number | null;
+  longitude: number | null;
   role: "user" | "admin";
   status: "active" | "suspended" | "banned";
   session_version: number;
@@ -55,6 +62,8 @@ function sanitizeUser(user: UserRow) {
     name: user.name,
     birthDate: user.birth_date,
     city: user.city,
+    latitude: user.latitude,
+    longitude: user.longitude,
     role: user.role,
     status: user.status,
     createdAt: user.created_at
@@ -98,7 +107,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
     const [user] = await sql<UserRow[]>`
       insert into users (email, password_hash, name, birth_date, city)
       values (${input.email}, ${passwordHash}, ${input.name}, ${input.birthDate}, ${input.city})
-      returning id, email, name, birth_date, city, role, status, session_version, created_at
+      returning id, email, name, birth_date, city, latitude, longitude, role, status, session_version, created_at
     `;
 
     const token = await signSessionToken(app, {
@@ -119,7 +128,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
     const input = loginSchema.parse(request.body);
 
     const [user] = await sql<(UserRow & { password_hash: string })[]>`
-      select id, email, password_hash, name, birth_date, city, role, status, session_version, created_at
+      select id, email, password_hash, name, birth_date, city, latitude, longitude, role, status, session_version, created_at
       from users
       where email = ${input.email}
       limit 1
@@ -184,7 +193,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       }
 
       const [user] = await sql<UserRow[]>`
-        select id, email, name, birth_date, city, role, status, session_version, created_at
+        select id, email, name, birth_date, city, latitude, longitude, role, status, session_version, created_at
         from users
         where id = ${session.userId}
         limit 1
@@ -239,7 +248,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
           birth_date = ${input.birthDate},
           city = ${input.city}
         where id = ${session.userId}
-        returning id, email, name, birth_date, city, role, status, session_version, created_at
+        returning id, email, name, birth_date, city, latitude, longitude, role, status, session_version, created_at
       `;
 
       return {
@@ -272,7 +281,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       const input = changePasswordSchema.parse(request.body);
 
       const [user] = await sql<(UserRow & { password_hash: string })[]>`
-        select id, email, password_hash, name, birth_date, city, role, status, session_version, created_at
+        select id, email, password_hash, name, birth_date, city, latitude, longitude, role, status, session_version, created_at
         from users
         where id = ${session.userId}
         limit 1
@@ -301,7 +310,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
           password_hash = ${passwordHash},
           session_version = session_version + 1
         where id = ${session.userId}
-        returning id, email, name, birth_date, city, role, status, session_version, created_at
+        returning id, email, name, birth_date, city, latitude, longitude, role, status, session_version, created_at
       `;
 
       const token = await signSessionToken(app, {
@@ -341,6 +350,44 @@ export async function registerAuthRoutes(app: FastifyInstance) {
     return {
       ok: true
     };
+  });
+
+  app.post("/api/auth/location", async (request, reply) => {
+    try {
+      const session = await requireSession(app, request.cookies.heartline_token);
+
+      if (!session) {
+        return reply.code(401).send({
+          message: "Not authenticated."
+        });
+      }
+
+      const input = updateLocationSchema.parse(request.body);
+
+      const [user] = await sql<UserRow[]>`
+        update users
+        set
+          latitude = ${input.latitude},
+          longitude = ${input.longitude}
+        where id = ${session.userId}
+        returning id, email, name, birth_date, city, latitude, longitude, role, status, session_version, created_at
+      `;
+
+      return {
+        user: sanitizeUser(user)
+      };
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return reply.code(400).send({
+          message: error.issues[0]?.message ?? "Invalid location payload.",
+          field: error.issues[0]?.path.join(".")
+        });
+      }
+
+      return reply.code(401).send({
+        message: "Not authenticated."
+      });
+    }
   });
 
   app.delete("/api/auth/account", async (request, reply) => {

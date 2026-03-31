@@ -9,6 +9,7 @@ import {
   genderOptions,
   getProfileCompletion,
   isProfileComplete,
+  promptQuestions,
   interestedInOptions,
   normalizeProfilePayload,
   type ProfilePayload,
@@ -38,6 +39,7 @@ export function ProfileEditorPage({
   const promptRefs = useRef<Array<HTMLTextAreaElement | null>>([]);
   const [form, setForm] = useState<ProfilePayload>(defaultProfileForm);
   const [interestInput, setInterestInput] = useState("");
+  const [draggedPhotoUrl, setDraggedPhotoUrl] = useState<string | null>(null);
 
   const sessionQuery = useQuery({
     queryKey: ["auth-session"],
@@ -331,22 +333,30 @@ export function ProfileEditorPage({
     }));
   }
 
-  function movePhoto(photoUrl: string, direction: "left" | "right") {
+  function updatePromptQuestion(index: number, question: string) {
+    setForm((current) => ({
+      ...current,
+      prompts: current.prompts.map((prompt, currentIndex) =>
+        currentIndex === index ? { ...prompt, question } : prompt
+      )
+    }));
+  }
+
+  function reorderPhotoGallery(sourcePhotoUrl: string, targetPhotoUrl: string) {
+    if (sourcePhotoUrl === targetPhotoUrl) {
+      return;
+    }
+
     const currentPhotoUrls = [...(form.photoUrls ?? [])];
-    const currentIndex = currentPhotoUrls.indexOf(photoUrl);
+    const sourceIndex = currentPhotoUrls.indexOf(sourcePhotoUrl);
+    const targetIndex = currentPhotoUrls.indexOf(targetPhotoUrl);
 
-    if (currentIndex === -1) {
+    if (sourceIndex === -1 || targetIndex === -1) {
       return;
     }
 
-    const nextIndex = direction === "left" ? currentIndex - 1 : currentIndex + 1;
-
-    if (nextIndex < 0 || nextIndex >= currentPhotoUrls.length) {
-      return;
-    }
-
-    const [photo] = currentPhotoUrls.splice(currentIndex, 1);
-    currentPhotoUrls.splice(nextIndex, 0, photo);
+    const [photo] = currentPhotoUrls.splice(sourceIndex, 1);
+    currentPhotoUrls.splice(targetIndex, 0, photo);
     setForm((current) => ({
       ...current,
       photoUrl: currentPhotoUrls[0] ?? null,
@@ -486,10 +496,15 @@ export function ProfileEditorPage({
                 <div className="grid gap-2">
                   <label className="inline-flex w-fit cursor-pointer items-center justify-center rounded-full border border-[#24162d] bg-[#24162d] px-4 py-3 text-sm font-semibold text-white shadow-[0_28px_70px_rgba(87,49,31,0.18)] transition hover:-translate-y-0.5">
                     <span>
-                      {uploadPhotoMutation.isPending ? "Uploading..." : "Choose photo"}
+                      {uploadPhotoMutation.isPending
+                        ? "Uploading..."
+                        : form.photoUrls && form.photoUrls.length > 0
+                          ? "Add another photo"
+                          : "Choose photo"}
                     </span>
                     <input
                       accept="image/png,image/jpeg,image/webp"
+                      disabled={(form.photoUrls?.length ?? 0) >= 6}
                       className="hidden"
                       onChange={(event) => {
                         const file = event.target.files?.[0];
@@ -507,7 +522,8 @@ export function ProfileEditorPage({
                     />
                   </label>
                   <p className="text-sm text-[#65556c]">
-                    PNG, JPG, or WebP up to 5MB. Add up to 6 photos and choose which one is primary.
+                    PNG, JPG, or WebP up to 5MB. {(form.photoUrls?.length ?? 0)}/6 photos added.
+                    Drag images to reorder them and your first image stays primary.
                   </p>
                   {photoError ? (
                     <p className="text-sm text-[#b53c27]">{photoError}</p>
@@ -518,15 +534,42 @@ export function ProfileEditorPage({
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {form.photoUrls.map((photoUrl) => (
                     <div
-                      className="rounded-[24px] border border-white/80 bg-white/60 p-3"
+                      className={`group relative rounded-[24px] border border-white/80 bg-white/60 p-3 transition ${
+                        draggedPhotoUrl === photoUrl ? "scale-[0.98] opacity-70" : ""
+                      }`}
+                      draggable
                       key={photoUrl}
+                      onDragOver={(event) => {
+                        event.preventDefault();
+                      }}
+                      onDragStart={() => {
+                        setDraggedPhotoUrl(photoUrl);
+                      }}
+                      onDrop={() => {
+                        if (draggedPhotoUrl) {
+                          reorderPhotoGallery(draggedPhotoUrl, photoUrl);
+                        }
+                        setDraggedPhotoUrl(null);
+                      }}
+                      onDragEnd={() => {
+                        setDraggedPhotoUrl(null);
+                      }}
                     >
+                      <button
+                        aria-label="Remove photo"
+                        className="absolute right-5 top-5 z-10 inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#24162d]/78 text-lg font-semibold text-white opacity-0 shadow-sm transition group-hover:opacity-100"
+                        onClick={() => removePhotoMutation.mutate(photoUrl)}
+                        title="Remove"
+                        type="button"
+                      >
+                        x
+                      </button>
                       <img
                         alt="Profile gallery preview"
                         className="h-40 w-full rounded-[20px] object-cover"
                         src={photoUrl}
                       />
-                      <div className="mt-3 flex flex-wrap gap-2">
+                      <div className="mt-3 flex items-center justify-between gap-3">
                         {photoUrl !== form.photoUrl ? (
                           <button
                             className="rounded-full border border-[#24162d]/10 bg-white/60 px-3 py-2 text-xs font-semibold text-[#24162d]"
@@ -540,30 +583,39 @@ export function ProfileEditorPage({
                             Primary
                           </span>
                         )}
-                        <button
-                          className="rounded-full border border-[#b53c27]/15 bg-[#fff1ed] px-3 py-2 text-xs font-semibold text-[#b53c27]"
-                          onClick={() => removePhotoMutation.mutate(photoUrl)}
-                          type="button"
-                        >
-                          Remove
-                        </button>
-                        <button
-                          className="rounded-full border border-[#24162d]/10 bg-white/60 px-3 py-2 text-xs font-semibold text-[#24162d]"
-                          onClick={() => movePhoto(photoUrl, "left")}
-                          type="button"
-                        >
-                          Move left
-                        </button>
-                        <button
-                          className="rounded-full border border-[#24162d]/10 bg-white/60 px-3 py-2 text-xs font-semibold text-[#24162d]"
-                          onClick={() => movePhoto(photoUrl, "right")}
-                          type="button"
-                        >
-                          Move right
-                        </button>
                       </div>
                     </div>
                   ))}
+                  {(form.photoUrls?.length ?? 0) < 6 ? (
+                    <label className="flex h-full min-h-56 cursor-pointer flex-col items-center justify-center rounded-[24px] border border-dashed border-[#24162d]/20 bg-white/35 p-5 text-center transition hover:-translate-y-0.5 hover:border-[#db5b43]/50 hover:bg-white/55">
+                      <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[#24162d] text-2xl text-white">
+                        +
+                      </span>
+                      <span className="mt-4 text-sm font-semibold text-[#24162d]">
+                        Add another photo
+                      </span>
+                      <span className="mt-2 text-sm leading-6 text-[#65556c]">
+                        You can add {6 - (form.photoUrls?.length ?? 0)} more.
+                      </span>
+                      <input
+                        accept="image/png,image/jpeg,image/webp"
+                        className="hidden"
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+
+                          if (!file) {
+                            return;
+                          }
+
+                          setPhotoError(null);
+                          setCropFileName(file.name);
+                          setCropImageSrc(URL.createObjectURL(file));
+                          event.target.value = "";
+                        }}
+                        type="file"
+                      />
+                    </label>
+                  ) : null}
                 </div>
               ) : null}
             </div>
@@ -752,23 +804,51 @@ export function ProfileEditorPage({
           <div className="grid gap-4">
             <p className="text-sm font-semibold text-[#24162d]">Prompts</p>
             {form.prompts.map((prompt, index) => (
-              <label className="grid gap-2 text-sm text-[#65556c]" key={prompt.question}>
-                <span>{prompt.question}</span>
-                <textarea
-                  className={`${fieldClass} min-h-24 resize-y`}
-                  ref={(element) => {
-                    promptRefs.current[index] = element;
-                  }}
-                  onChange={(event) => updatePrompt(index, event.target.value)}
-                  placeholder="Be specific. The answer should sound like a real person."
-                  value={prompt.answer}
-                />
-                {fieldErrors[`prompts.${index}.answer`] ? (
-                  <span className="text-sm text-[#b53c27]">
-                    {fieldErrors[`prompts.${index}.answer`]}
-                  </span>
-                ) : null}
-              </label>
+              <div className="grid gap-3" key={`${index}-${prompt.question}`}>
+                <label className="grid gap-2 text-sm text-[#65556c]">
+                  <span>Prompt question {index + 1}</span>
+                  <input
+                    className={fieldClass}
+                    onChange={(event) => updatePromptQuestion(index, event.target.value)}
+                    placeholder="Write your own prompt question"
+                    type="text"
+                    value={prompt.question}
+                  />
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {promptQuestions.map((suggestion) => (
+                    <button
+                      className={
+                        prompt.question === suggestion
+                          ? "rounded-full border border-[#24162d] bg-[#24162d] px-3 py-2 text-xs font-semibold text-white"
+                          : "rounded-full border border-[#24162d]/10 bg-white/60 px-3 py-2 text-xs font-semibold text-[#24162d]"
+                      }
+                      key={`${index}-${suggestion}`}
+                      onClick={() => updatePromptQuestion(index, suggestion)}
+                      type="button"
+                    >
+                      {suggestion}
+                    </button>
+                  ))}
+                </div>
+                <label className="grid gap-2 text-sm text-[#65556c]">
+                  <span>Answer</span>
+                  <textarea
+                    className={`${fieldClass} min-h-24 resize-y`}
+                    ref={(element) => {
+                      promptRefs.current[index] = element;
+                    }}
+                    onChange={(event) => updatePrompt(index, event.target.value)}
+                    placeholder="Be specific. The answer should sound like a real person."
+                    value={prompt.answer}
+                  />
+                  {fieldErrors[`prompts.${index}.answer`] ? (
+                    <span className="text-sm text-[#b53c27]">
+                      {fieldErrors[`prompts.${index}.answer`]}
+                    </span>
+                  ) : null}
+                </label>
+              </div>
             ))}
           </div>
 
@@ -831,87 +911,115 @@ export function ProfileEditorPage({
 
         <aside className={`${panelClass} h-fit`}>
           <p className={labelClass}>Preview</p>
-          {form.photoUrl ? (
-            <img
-              alt="Profile preview"
-              className="mb-4 h-52 w-full rounded-[28px] object-cover"
-              src={form.photoUrl}
-            />
-          ) : null}
-          {form.photoUrls && form.photoUrls.length > 1 ? (
-            <div className="mb-4 grid grid-cols-4 gap-2">
-              {form.photoUrls.slice(0, 4).map((photoUrl) => (
+          <div className="overflow-hidden rounded-[32px] bg-white">
+            <div className="relative">
+              {form.photoUrl ? (
                 <img
-                  alt="Secondary profile preview"
-                  className="h-16 w-full rounded-[16px] object-cover"
-                  key={photoUrl}
-                  src={photoUrl}
+                  alt="Profile preview"
+                  className="aspect-[3/4] w-full object-cover"
+                  src={form.photoUrl}
                 />
-              ))}
+              ) : (
+                <div className="aspect-[3/4] w-full bg-[#24162d]/8" />
+              )}
+              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#120b14]/82 via-[#120b14]/38 to-transparent px-6 pb-6 pt-20 text-white">
+                <div className="flex flex-wrap items-end justify-between gap-4">
+                  <div>
+                    <p className="text-[0.72rem] uppercase tracking-[0.16em] text-white/70">
+                      Live profile preview
+                    </p>
+                    <h3 className="mt-2 font-serif text-[clamp(1.8rem,4vw,2.6rem)] leading-[0.95]">
+                      {sessionQuery.data?.user.name ?? "Your profile"}
+                    </h3>
+                    <p className="mt-2 text-sm uppercase tracking-[0.14em] text-white/78">
+                      {sessionQuery.data?.user.city ?? "City"} • {form.relationshipIntent.replaceAll("_", " ")}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {form.verificationStatus === "verified" ? (
+                      <span className="rounded-full bg-white px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-[#1a6b52]">
+                        Verified
+                      </span>
+                    ) : form.verificationStatus === "pending" ? (
+                      <span className="rounded-full bg-white px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-[#9a6400]">
+                        Pending
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
             </div>
-          ) : null}
-          {form.voiceIntroUrl ? (
-            <div className="mb-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#db5b43]">
-                Voice intro
-              </p>
-              <audio className="mt-2 w-full" controls preload="none" src={form.voiceIntroUrl} />
-            </div>
-          ) : null}
-          <h3 className="font-serif text-2xl text-[#24162d]">
-            {sessionQuery.data?.user.name ?? "Your profile"}
-          </h3>
-          <p className="mt-2 text-base leading-7 text-[#65556c]">
-            {sessionQuery.data?.user.city ?? "City"} {" | "} {form.relationshipIntent.replaceAll("_", " ")}
-          </p>
 
-          <p className="mt-2 text-sm text-[#65556c]">
-            Gender: {genderOptions.find((option) => option.value === form.gender)?.label ?? "Please select"}
-          </p>
+            {form.photoUrls && form.photoUrls.length > 1 ? (
+              <div className="border-t border-[#24162d]/8 bg-[#fffaf4] px-4 py-4">
+                <div className="grid grid-cols-4 gap-3">
+                  {form.photoUrls.map((photoUrl) => (
+                    <img
+                      alt="Secondary profile preview"
+                      className="h-20 w-full rounded-[18px] object-cover"
+                      key={photoUrl}
+                      src={photoUrl}
+                    />
+                  ))}
+                </div>
+              </div>
+            ) : null}
 
-          <p className="mt-2 text-sm text-[#65556c]">
-            Verification: {form.verificationStatus ?? "unverified"}
-          </p>
-
-          <p className="mt-2 text-sm text-[#65556c]">
-            Interested in:{" "}
-            {form.interestedIn.length > 0
-              ? form.interestedIn
-                  .map(
-                    (value) =>
-                      interestedInOptions.find((option) => option.value === value)?.label
-                  )
-                  .join(", ")
-              : "Nothing selected yet"}
-          </p>
-
-          <p className="mt-5 text-base leading-7 text-[#65556c]">
-            {form.bio || "Your bio preview will show up here once you start writing."}
-          </p>
-
-          <div className="mt-5 flex flex-wrap gap-2">
-            {form.interests.map((interest) => (
-              <span
-                className="rounded-full border border-[#24162d]/10 bg-white/60 px-3 py-2 text-sm text-[#24162d]"
-                key={interest}
-              >
-                {interest}
-              </span>
-            ))}
-          </div>
-
-          <div className="mt-6 grid gap-4">
-            {form.prompts.map((prompt) => (
-              <article
-                className="rounded-3xl border border-white/80 bg-[rgba(255,251,246,0.78)] p-5"
-                key={prompt.question}
-              >
-                <p className="text-sm font-semibold text-[#db5b43]">{prompt.question}</p>
-                <p className="mt-2 text-base leading-7 text-[#65556c]">
-                  {prompt.answer || "Answer this prompt to make your profile feel more personal."}
+            <div className="grid gap-4 p-4 sm:p-6">
+              <section className="rounded-[28px] bg-[#fffaf4] p-5">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#db5b43]">
+                  About me
                 </p>
-              </article>
-            ))}
+                <p className="mt-3 text-lg leading-8 text-[#4b3b4f]">
+                  {form.bio || "Your bio preview will show up here once you start writing."}
+                </p>
+              </section>
+
+              <div className="grid gap-4">
+                {form.prompts.map((prompt, index) => (
+                  <article
+                    className="rounded-3xl border border-white/80 bg-[rgba(255,251,246,0.78)] p-5"
+                    key={`${index}-${prompt.question}`}
+                  >
+                    <p className="text-sm font-semibold text-[#db5b43]">
+                      {prompt.question || `Prompt ${index + 1}`}
+                    </p>
+                    <p className="mt-2 text-base leading-7 text-[#65556c]">
+                      {prompt.answer || "Answer this prompt to make your profile feel more personal."}
+                    </p>
+                  </article>
+                ))}
+              </div>
+
+              {form.voiceIntroUrl ? (
+                <section className="rounded-[28px] bg-[#fffaf4] p-5">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#db5b43]">
+                    Voice intro
+                  </p>
+                  <audio className="mt-3 w-full" controls preload="none" src={form.voiceIntroUrl} />
+                </section>
+              ) : null}
+
+              <section className="rounded-[28px] bg-[#fffaf4] p-5">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#db5b43]">
+                  Interests
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {form.interests.length > 0 ? (
+                    form.interests.map((interest) => (
+                      <span
+                        className="rounded-full border border-[#24162d]/10 bg-white px-3 py-2 text-sm font-medium text-[#24162d]"
+                        key={interest}
+                      >
+                        {interest}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-sm text-[#65556c]">No interests added yet</span>
+                  )}
+                </div>
+              </section>
+            </div>
           </div>
 
           {profileQuery.data ? (

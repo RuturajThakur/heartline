@@ -27,6 +27,12 @@ type IncomingLikeRow = {
   photo_path: string | null;
 };
 
+type LikeMessageSeedRow = {
+  actor_user_id: string;
+  reaction_note: string | null;
+  created_at: string;
+};
+
 function calculateAge(birthDate: string) {
   const today = new Date();
   const dob = new Date(birthDate);
@@ -243,19 +249,65 @@ export async function registerLikeRoutes(app: FastifyInstance) {
         matched = true;
         matchId = match.id;
 
-        await sql`
+        const [conversation] = await sql<Array<{ id: string }>>`
           insert into conversations (match_id, user_a, user_b)
           values (${match.id}, ${orderedUsers[0]}, ${orderedUsers[1]})
-          on conflict (match_id) do nothing
+          on conflict (match_id) do update set updated_at = conversations.updated_at
+          returning id
         `;
+
+        const [existingConversationMessage] = await sql<Array<{ count: number }>>`
+          select count(*)::int as count
+          from messages
+          where conversation_id = ${conversation.id}
+        `;
+
+        if (!existingConversationMessage || existingConversationMessage.count === 0) {
+          const likeMessageSeeds = await sql<LikeMessageSeedRow[]>`
+            select actor_user_id, reaction_note, created_at
+            from likes
+            where (
+              actor_user_id = ${session.userId}
+              and target_user_id = ${input.targetUserId}
+            ) or (
+              actor_user_id = ${input.targetUserId}
+              and target_user_id = ${session.userId}
+            )
+            order by created_at asc
+          `;
+
+          for (const likeMessage of likeMessageSeeds) {
+            const trimmedReactionNote = likeMessage.reaction_note?.trim();
+
+            if (!trimmedReactionNote) {
+              continue;
+            }
+
+            await sql`
+              insert into messages (conversation_id, sender_user_id, content, created_at)
+              values (
+                ${conversation.id},
+                ${likeMessage.actor_user_id},
+                ${trimmedReactionNote},
+                ${likeMessage.created_at}
+              )
+            `;
+          }
+
+          await sql`
+            update conversations
+            set updated_at = now()
+            where id = ${conversation.id}
+          `;
+        }
 
         await createNotification({
           recipientUserId: session.userId,
           actorUserId: input.targetUserId,
           type: "match",
           title: "You have a new match",
-          body: "Open Product to start the conversation.",
-          targetPath: "/product",
+          body: "Open Inbox to start the conversation.",
+          targetPath: "/inbox",
           payload: {
             matchId
           }
@@ -265,8 +317,8 @@ export async function registerLikeRoutes(app: FastifyInstance) {
           actorUserId: session.userId,
           type: "match",
           title: "You have a new match",
-          body: "Open Product to start the conversation.",
-          targetPath: "/product",
+          body: "Open Inbox to start the conversation.",
+          targetPath: "/inbox",
           payload: {
             matchId
           }

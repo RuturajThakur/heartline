@@ -14,6 +14,8 @@ type IncomingLike = {
   prompt: string;
   tags: string[];
   photoUrl: string | null;
+  reactionType?: "profile" | "photo" | "bio" | "prompt" | null;
+  reactionNote?: string | null;
 };
 
 const panelClass =
@@ -132,6 +134,14 @@ export function LikesPage() {
               <p className="mt-3 text-sm font-medium uppercase tracking-[0.12em] text-[#db5b43]">
                 {like.relationshipIntent.replaceAll("_", " ")}
               </p>
+              {like.reactionNote ? (
+                <div className="mt-4 rounded-[22px] border border-[#24162d]/10 bg-white/70 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#db5b43]">
+                    Message with the like
+                  </p>
+                  <p className="mt-2 text-base leading-7 text-[#24162d]">{like.reactionNote}</p>
+                </div>
+              ) : null}
               <p className="mt-3 text-base leading-7 text-[#65556c]">{like.prompt}</p>
               <p className="mt-4 text-sm font-medium tracking-[0.02em] text-[#db5b43]">
                 {like.tags.join(" / ")}

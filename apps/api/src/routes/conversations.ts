@@ -1,5 +1,8 @@
 import { env } from "../config";
 import type { FastifyInstance } from "fastify";
+import { randomUUID } from "node:crypto";
+import path from "node:path";
+import { writeFile } from "node:fs/promises";
 import { z } from "zod";
 import { requireSession } from "../auth";
 import { sql } from "../db";
@@ -18,6 +21,8 @@ type ConversationRow = {
   last_message_content: string | null;
   last_message_created_at: string | null;
   last_message_sender_user_id: string | null;
+  last_message_id: string | null;
+  last_message_attachment_count: number;
   unread_count: number;
 };
 
@@ -28,9 +33,47 @@ type MessageRow = {
   created_at: string;
 };
 
+type AttachmentRow = {
+  id: string;
+  message_id: string;
+  file_path: string;
+  original_name: string;
+  mime_type: string;
+  file_size: number;
+  created_at: string;
+};
+
 const sendMessageSchema = z.object({
-  content: z.string().trim().min(1, "Message cannot be empty.").max(500, "Message is too long.")
+  content: z.string().trim().max(500, "Message is too long.").default("")
 });
+
+function getAttachmentKind(mimeType: string) {
+  if (mimeType.startsWith("image/")) {
+    return "image";
+  }
+
+  if (mimeType.startsWith("video/")) {
+    return "video";
+  }
+
+  if (mimeType.startsWith("audio/")) {
+    return "audio";
+  }
+
+  return "file";
+}
+
+function summarizeMessage(content: string, attachmentCount: number) {
+  if (content.trim()) {
+    return content;
+  }
+
+  if (attachmentCount <= 0) {
+    return "";
+  }
+
+  return attachmentCount === 1 ? "Sent an attachment" : `Sent ${attachmentCount} attachments`;
+}
 
 async function getConversationForUser(conversationId: string, userId: string) {
   const [conversation] = await sql<Array<{ id: string }>>`
@@ -85,6 +128,8 @@ export async function registerConversationRoutes(app: FastifyInstance) {
           lm.content as last_message_content,
           lm.created_at as last_message_created_at,
           lm.sender_user_id as last_message_sender_user_id,
+          lm.id as last_message_id,
+          coalesce(lma.attachment_count, 0) as last_message_attachment_count,
           coalesce(unread.unread_count, 0) as unread_count
         from conversations c
         join users u
@@ -98,12 +143,17 @@ export async function registerConversationRoutes(app: FastifyInstance) {
             else c.user_a
           end
         left join lateral (
-          select m.content, m.created_at, m.sender_user_id
+          select m.id, m.content, m.created_at, m.sender_user_id
           from messages m
           where m.conversation_id = c.id
           order by m.created_at desc
           limit 1
         ) lm on true
+        left join lateral (
+          select count(*)::int as attachment_count
+          from message_attachments ma
+          where ma.message_id = lm.id
+        ) lma on true
         left join lateral (
           select count(*)::int as unread_count
           from messages m
@@ -147,9 +197,13 @@ export async function registerConversationRoutes(app: FastifyInstance) {
             (photoPath) => `${env.API_URL}${photoPath}`
           ),
           updatedAt: conversation.updated_at,
-          lastMessage: conversation.last_message_content,
+          lastMessage: summarizeMessage(
+            conversation.last_message_content ?? "",
+            Number(conversation.last_message_attachment_count) || 0
+          ),
           lastMessageAt: conversation.last_message_created_at,
           lastMessageSenderUserId: conversation.last_message_sender_user_id,
+          lastMessageHasAttachments: (Number(conversation.last_message_attachment_count) || 0) > 0,
           unreadCount: Number(conversation.unread_count) || 0
         }));
 
@@ -196,6 +250,14 @@ export async function registerConversationRoutes(app: FastifyInstance) {
         where conversation_id = ${params.conversationId}
         order by created_at asc
       `;
+      const attachments = messages.length
+        ? await sql<AttachmentRow[]>`
+            select id, message_id, file_path, original_name, mime_type, file_size, created_at
+            from message_attachments
+            where message_id in ${sql(messages.map((message) => message.id))}
+            order by created_at asc
+          `
+        : [];
 
       await sql`
         insert into conversation_reads (conversation_id, user_id, last_read_at)
@@ -209,7 +271,17 @@ export async function registerConversationRoutes(app: FastifyInstance) {
           id: message.id,
           senderUserId: message.sender_user_id,
           content: message.content,
-          createdAt: message.created_at
+          createdAt: message.created_at,
+          attachments: attachments
+            .filter((attachment) => attachment.message_id === message.id)
+            .map((attachment) => ({
+              id: attachment.id,
+              name: attachment.original_name,
+              mimeType: attachment.mime_type,
+              kind: getAttachmentKind(attachment.mime_type),
+              size: attachment.file_size,
+              url: `${env.API_URL}${attachment.file_path}`
+            }))
         }))
       };
     } catch {
@@ -237,7 +309,6 @@ export async function registerConversationRoutes(app: FastifyInstance) {
         });
       }
 
-      const input = sendMessageSchema.parse(request.body);
       const conversation = await getConversationForUser(params.conversationId, session.userId);
 
       if (!conversation) {
@@ -246,11 +317,81 @@ export async function registerConversationRoutes(app: FastifyInstance) {
         });
       }
 
+      let content = "";
+      const uploadedAttachments: Array<{
+        filePath: string;
+        originalName: string;
+        mimeType: string;
+        fileSize: number;
+      }> = [];
+
+      if (request.isMultipart()) {
+        const uploadsRoot = path.resolve(process.cwd(), "uploads", "chat-attachments");
+
+        for await (const part of request.parts()) {
+          if (part.type === "file") {
+            if (!part.filename) {
+              continue;
+            }
+
+            const extension = path.extname(part.filename) || "";
+            const fileName = `${session.userId}-${randomUUID()}${extension}`;
+            const fileBuffer = await part.toBuffer();
+            const relativePath = `/uploads/chat-attachments/${fileName}`;
+            const absolutePath = path.resolve(process.cwd(), `.${relativePath}`);
+
+            await writeFile(absolutePath, fileBuffer);
+
+            uploadedAttachments.push({
+              filePath: relativePath,
+              originalName: part.filename,
+              mimeType: part.mimetype || "application/octet-stream",
+              fileSize: fileBuffer.byteLength
+            });
+            continue;
+          }
+
+          if (part.fieldname === "content") {
+            content = String(part.value ?? "");
+          }
+        }
+      } else {
+        const input = sendMessageSchema.parse(request.body);
+        content = input.content;
+      }
+
+      const normalizedContent = content.trim();
+
+      if (!normalizedContent && uploadedAttachments.length === 0) {
+        return reply.code(400).send({
+          message: "Add a message or at least one attachment."
+        });
+      }
+
       const [message] = await sql<Array<{ id: string; sender_user_id: string; content: string; created_at: string }>>`
         insert into messages (conversation_id, sender_user_id, content)
-        values (${params.conversationId}, ${session.userId}, ${input.content})
+        values (${params.conversationId}, ${session.userId}, ${normalizedContent})
         returning id, sender_user_id, content, created_at
       `;
+
+      if (uploadedAttachments.length > 0) {
+        await sql`
+          insert into message_attachments ${sql(
+            uploadedAttachments.map((attachment) => ({
+              message_id: message.id,
+              file_path: attachment.filePath,
+              original_name: attachment.originalName,
+              mime_type: attachment.mimeType,
+              file_size: attachment.fileSize
+            })),
+            "message_id",
+            "file_path",
+            "original_name",
+            "mime_type",
+            "file_size"
+          )}
+        `;
+      }
 
       await sql`
         update conversations
@@ -274,8 +415,11 @@ export async function registerConversationRoutes(app: FastifyInstance) {
           actorUserId: session.userId,
           type: "message",
           title: "You have a new message",
-          body: input.content.length > 120 ? `${input.content.slice(0, 117)}...` : input.content,
-          targetPath: "/product",
+          body:
+            summarizeMessage(normalizedContent, uploadedAttachments.length).length > 120
+              ? `${summarizeMessage(normalizedContent, uploadedAttachments.length).slice(0, 117)}...`
+              : summarizeMessage(normalizedContent, uploadedAttachments.length),
+          targetPath: "/inbox",
           payload: {
             conversationId: params.conversationId
           }
@@ -295,7 +439,15 @@ export async function registerConversationRoutes(app: FastifyInstance) {
           id: message.id,
           senderUserId: message.sender_user_id,
           content: message.content,
-          createdAt: message.created_at
+          createdAt: message.created_at,
+          attachments: uploadedAttachments.map((attachment, index) => ({
+            id: `${message.id}-${index}`,
+            name: attachment.originalName,
+            mimeType: attachment.mimeType,
+            kind: getAttachmentKind(attachment.mimeType),
+            size: attachment.fileSize,
+            url: `${env.API_URL}${attachment.filePath}`
+          }))
         }
       };
     } catch (error) {

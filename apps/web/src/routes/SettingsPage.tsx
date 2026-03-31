@@ -19,6 +19,7 @@ type DeleteAccountPayload = {
   currentPassword: string;
   confirmText: string;
 };
+
 type AppealPayload = {
   message: string;
 };
@@ -49,6 +50,7 @@ export function SettingsPage() {
   const [appealForm, setAppealForm] = useState<AppealPayload>({
     message: ""
   });
+  const [locationStatus, setLocationStatus] = useState<string | null>(null);
 
   useEffect(() => {
     if (sessionQuery.data?.user) {
@@ -132,6 +134,55 @@ export function SettingsPage() {
       navigate({
         to: "/"
       });
+    }
+  });
+  const locationMutation = useMutation({
+    mutationFn: async () => {
+      if (typeof window === "undefined" || !navigator.geolocation) {
+        throw new ApiError("Location is not available in this browser.");
+      }
+
+      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 10_000,
+          maximumAge: 300_000
+        });
+      });
+
+      return apiFetch<{
+        user: {
+          id: string;
+          email: string;
+          name: string;
+          birthDate: string;
+          city: string;
+          latitude: number | null;
+          longitude: number | null;
+          role: "user" | "admin";
+          status: "active" | "suspended" | "banned";
+          createdAt: string;
+        };
+      }>("/api/auth/location", {
+        method: "POST",
+        body: JSON.stringify({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude
+        })
+      });
+    },
+    onMutate: () => {
+      setLocationStatus(null);
+    },
+    onSuccess: async (result) => {
+      queryClient.setQueryData(["auth-session"], result);
+      await queryClient.invalidateQueries({
+        queryKey: ["auth-session"]
+      });
+      setLocationStatus("Discovery location updated.");
+    },
+    onError: (error) => {
+      setLocationStatus(error instanceof ApiError ? error.message : "Could not update location.");
     }
   });
   const appealMutation = useMutation({
@@ -297,6 +348,47 @@ export function SettingsPage() {
             {passwordMutation.isPending ? "Updating..." : "Update password"}
           </button>
         </form>
+      </div>
+
+      <div className={panelClass}>
+        <div>
+          <p className={labelClass}>Discovery location</p>
+          <h3 className="font-serif text-2xl text-[#24162d]">Static until you change it</h3>
+          <p className="mt-3 max-w-2xl text-base leading-7 text-[#65556c]">
+            Distance filtering uses a saved discovery location. It will not update automatically
+            when you travel, and it does not show your exact address to other people.
+          </p>
+        </div>
+
+        <div className="mt-5 grid gap-4 rounded-[24px] border border-[#24162d]/10 bg-white/60 p-5">
+          <div className="grid gap-1">
+            <p className="text-sm font-semibold text-[#24162d]">Current display city</p>
+            <p className="text-sm leading-6 text-[#65556c]">
+              {sessionQuery.data?.user.city || "No city saved yet"}
+            </p>
+          </div>
+          <div className="grid gap-1">
+            <p className="text-sm font-semibold text-[#24162d]">Saved discovery location</p>
+            <p className="text-sm leading-6 text-[#65556c]">
+              {typeof sessionQuery.data?.user.latitude === "number" &&
+              typeof sessionQuery.data?.user.longitude === "number"
+                ? "Location saved for distance filters."
+                : "No saved location yet. Distance filters will stay off until you add one."}
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-3">
+            <button
+              className="inline-flex items-center justify-center rounded-full border border-[#24162d] bg-[#24162d] px-5 py-3 text-sm font-semibold text-white shadow-[0_28px_70px_rgba(87,49,31,0.18)] transition hover:-translate-y-0.5"
+              onClick={() => locationMutation.mutate()}
+              type="button"
+            >
+              {locationMutation.isPending ? "Saving location..." : "Use current location"}
+            </button>
+          </div>
+
+          {locationStatus ? <p className="text-sm text-[#65556c]">{locationStatus}</p> : null}
+        </div>
       </div>
 
       <div className={`${panelClass} grid gap-4`}>

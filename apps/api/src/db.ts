@@ -17,6 +17,8 @@ export async function ensureDatabase() {
       name text not null,
       birth_date date not null,
       city text not null,
+      latitude double precision,
+      longitude double precision,
       role text not null default 'user',
       status text not null default 'active',
       session_version integer not null default 1,
@@ -37,6 +39,16 @@ export async function ensureDatabase() {
   await sql`
     alter table users
     add column if not exists status text not null default 'active'
+  `;
+
+  await sql`
+    alter table users
+    add column if not exists latitude double precision
+  `;
+
+  await sql`
+    alter table users
+    add column if not exists longitude double precision
   `;
 
   await sql`
@@ -155,6 +167,18 @@ export async function ensureDatabase() {
       conversation_id uuid not null references conversations(id) on delete cascade,
       sender_user_id uuid not null references users(id) on delete cascade,
       content text not null,
+      created_at timestamptz not null default now()
+    )
+  `;
+
+  await sql`
+    create table if not exists message_attachments (
+      id uuid primary key default gen_random_uuid(),
+      message_id uuid not null references messages(id) on delete cascade,
+      file_path text not null,
+      original_name text not null,
+      mime_type text not null,
+      file_size integer not null,
       created_at timestamptz not null default now()
     )
   `;

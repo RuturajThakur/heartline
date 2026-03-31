@@ -9,6 +9,8 @@ type DiscoveryRow = {
   name: string;
   birth_date: string;
   city: string;
+  latitude: number | null;
+  longitude: number | null;
   bio: string;
   gender: "man" | "woman" | "non_binary" | "prefer_not_to_say";
   interested_in: Array<"men" | "women" | "all">;
@@ -67,9 +69,34 @@ function calculateAge(birthDate: string) {
 const discoveryQuerySchema = z.object({
   minAge: z.coerce.number().int().min(18).max(100).optional(),
   maxAge: z.coerce.number().int().min(18).max(100).optional(),
+  distanceKm: z.coerce.number().int().min(1).max(500).optional(),
   city: z.string().trim().max(80).optional(),
   relationshipIntent: z.enum(["long_term", "short_term", "figuring_it_out"]).optional()
 });
+
+function toRadians(value: number) {
+  return (value * Math.PI) / 180;
+}
+
+function calculateDistanceKm(
+  origin: { latitude: number; longitude: number },
+  target: { latitude: number; longitude: number }
+) {
+  const earthRadiusKm = 6371;
+  const deltaLatitude = toRadians(target.latitude - origin.latitude);
+  const deltaLongitude = toRadians(target.longitude - origin.longitude);
+  const originLatitude = toRadians(origin.latitude);
+  const targetLatitude = toRadians(target.latitude);
+
+  const haversine =
+    Math.sin(deltaLatitude / 2) * Math.sin(deltaLatitude / 2) +
+    Math.cos(originLatitude) *
+      Math.cos(targetLatitude) *
+      Math.sin(deltaLongitude / 2) *
+      Math.sin(deltaLongitude / 2);
+
+  return earthRadiusKm * 2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
+}
 
 export async function registerDiscoveryRoutes(app: FastifyInstance) {
   app.get("/api/discovery", async (request, reply) => {
@@ -88,11 +115,14 @@ export async function registerDiscoveryRoutes(app: FastifyInstance) {
           interested_in: Array<"men" | "women" | "all">;
           interests: string[];
           relationship_intent: "long_term" | "short_term" | "figuring_it_out";
+          latitude: number | null;
+          longitude: number | null;
         }>
       >`
-        select gender, interested_in, interests, relationship_intent
-        from dating_profiles
-        where user_id = ${session.userId}
+        select dp.gender, dp.interested_in, dp.interests, dp.relationship_intent, u.latitude, u.longitude
+        from dating_profiles dp
+        join users u on u.id = dp.user_id
+        where dp.user_id = ${session.userId}
         limit 1
       `;
 
@@ -111,6 +141,8 @@ export async function registerDiscoveryRoutes(app: FastifyInstance) {
           u.name,
           u.birth_date,
           u.city,
+          u.latitude,
+          u.longitude,
           dp.bio,
           dp.gender,
           dp.interested_in,
@@ -163,6 +195,23 @@ export async function registerDiscoveryRoutes(app: FastifyInstance) {
         const viewerInterestedIn = viewerProfile.interested_in;
         const candidateInterestedIn = profile.interested_in;
         const age = calculateAge(profile.birth_date);
+        const hasViewerCoordinates =
+          typeof viewerProfile.latitude === "number" && typeof viewerProfile.longitude === "number";
+        const hasCandidateCoordinates =
+          typeof profile.latitude === "number" && typeof profile.longitude === "number";
+        const distanceKm =
+          hasViewerCoordinates && hasCandidateCoordinates
+            ? calculateDistanceKm(
+                {
+                  latitude: viewerProfile.latitude!,
+                  longitude: viewerProfile.longitude!
+                },
+                {
+                  latitude: profile.latitude!,
+                  longitude: profile.longitude!
+                }
+              )
+            : null;
 
         const viewerAllowsCandidate =
           viewerInterestedIn.includes("all") ||
@@ -184,8 +233,18 @@ export async function registerDiscoveryRoutes(app: FastifyInstance) {
 
         const cityMatches =
           !normalizedCity || profile.city.trim().toLowerCase().includes(normalizedCity);
+        const distanceMatches =
+          !filters.distanceKm ||
+          (distanceKm !== null && distanceKm <= filters.distanceKm);
 
-        return viewerAllowsCandidate && candidateAllowsViewer && ageMatches && intentMatches && cityMatches;
+        return (
+          viewerAllowsCandidate &&
+          candidateAllowsViewer &&
+          ageMatches &&
+          intentMatches &&
+          cityMatches &&
+          distanceMatches
+        );
       });
 
       const rankedProfiles = filteredProfiles
@@ -216,10 +275,48 @@ export async function registerDiscoveryRoutes(app: FastifyInstance) {
                   (1000 * 60 * 60 * 24 * 7)
               )
           );
+          const distanceScore =
+            typeof viewerProfile.latitude === "number" &&
+            typeof viewerProfile.longitude === "number" &&
+            typeof profile.latitude === "number" &&
+            typeof profile.longitude === "number"
+              ? Math.max(
+                  0,
+                  6 -
+                    Math.floor(
+                      calculateDistanceKm(
+                        {
+                          latitude: viewerProfile.latitude,
+                          longitude: viewerProfile.longitude
+                        },
+                        {
+                          latitude: profile.latitude,
+                          longitude: profile.longitude
+                        }
+                      ) / 15
+                    )
+                )
+              : 0;
 
           return {
             profile,
             prompts,
+            distanceKm:
+              typeof viewerProfile.latitude === "number" &&
+              typeof viewerProfile.longitude === "number" &&
+              typeof profile.latitude === "number" &&
+              typeof profile.longitude === "number"
+                ? calculateDistanceKm(
+                    {
+                      latitude: viewerProfile.latitude,
+                      longitude: viewerProfile.longitude
+                    },
+                    {
+                      latitude: profile.latitude,
+                      longitude: profile.longitude
+                    }
+                  )
+                : null,
             score:
               sharedInterests * 4 +
               cityScore +
@@ -227,19 +324,22 @@ export async function registerDiscoveryRoutes(app: FastifyInstance) {
               ageProximityScore +
               profileCompletenessScore +
               photoCountScore +
-              freshnessScore
+              freshnessScore +
+              distanceScore
           };
         })
         .sort((left, right) => right.score - left.score);
 
       return {
-        items: rankedProfiles.map(({ profile, prompts }) => ({
+        items: rankedProfiles.map(({ profile, prompts, distanceKm }) => ({
           id: profile.user_id,
           name: profile.name,
           age: calculateAge(profile.birth_date),
           city: profile.city,
+          distanceKm: distanceKm === null ? null : Math.round(distanceKm),
           bio: profile.bio,
           relationshipIntent: profile.relationship_intent,
+          prompts,
           prompt: prompts[0]?.answer ?? "No prompt answer yet.",
           tags: profile.interests,
           photoUrl: profile.photo_path ? `${env.API_URL}${profile.photo_path}` : null,
@@ -281,6 +381,8 @@ export async function registerDiscoveryRoutes(app: FastifyInstance) {
           u.name,
           u.birth_date,
           u.city,
+          u.latitude,
+          u.longitude,
           dp.bio,
           dp.gender,
           dp.interested_in,
@@ -308,24 +410,30 @@ export async function registerDiscoveryRoutes(app: FastifyInstance) {
       `;
 
       return {
-        items: profiles.map((profile) => ({
-          id: profile.user_id,
-          name: profile.name,
-          age: calculateAge(profile.birth_date),
-          city: profile.city,
-          bio: profile.bio,
-          relationshipIntent: profile.relationship_intent,
-          prompt: normalizePrompts(profile.prompts)[0]?.answer ?? "No prompt answer yet.",
-          tags: profile.interests,
-          photoUrl: profile.photo_path ? `${env.API_URL}${profile.photo_path}` : null,
-          photoUrls: (profile.photo_paths ?? []).map((photoPath) => `${env.API_URL}${photoPath}`),
-          voiceIntroUrl: profile.voice_intro_path
-            ? `${env.API_URL}${profile.voice_intro_path}`
-            : null,
-          verificationStatus: profile.verification_status,
-          saved: true,
-          matched: false
-        }))
+        items: profiles.map((profile) => {
+          const prompts = normalizePrompts(profile.prompts);
+
+          return {
+            id: profile.user_id,
+            name: profile.name,
+            age: calculateAge(profile.birth_date),
+            city: profile.city,
+            distanceKm: null,
+            bio: profile.bio,
+            relationshipIntent: profile.relationship_intent,
+            prompts,
+            prompt: prompts[0]?.answer ?? "No prompt answer yet.",
+            tags: profile.interests,
+            photoUrl: profile.photo_path ? `${env.API_URL}${profile.photo_path}` : null,
+            photoUrls: (profile.photo_paths ?? []).map((photoPath) => `${env.API_URL}${photoPath}`),
+            voiceIntroUrl: profile.voice_intro_path
+              ? `${env.API_URL}${profile.voice_intro_path}`
+              : null,
+            verificationStatus: profile.verification_status,
+            saved: true,
+            matched: false
+          };
+        })
       };
     } catch {
       return reply.code(401).send({

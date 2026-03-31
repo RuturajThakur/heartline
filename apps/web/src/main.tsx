@@ -11,8 +11,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { AppShell } from "./shell/AppShell";
 import { BlockedPage } from "./routes/BlockedPage";
+import { DiscoveryPage } from "./routes/DiscoveryFeedPage";
 import { EditProfilePage } from "./routes/EditProfilePage";
 import { HomePage } from "./routes/HomePage";
+import { InboxPage } from "./routes/InboxPage";
 import { LikesPage } from "./routes/LikesPage";
 import { ModerationPage } from "./routes/ModerationPage";
 import { NotificationsPage } from "./routes/NotificationsPage";
@@ -41,6 +43,18 @@ const productRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/product",
   component: ProductPage
+});
+
+const inboxRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/inbox",
+  component: InboxPage
+});
+
+const discoveryRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/discovery",
+  component: DiscoveryPage
 });
 
 const onboardingRoute = createRoute({
@@ -87,6 +101,8 @@ const notificationsRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
   homeRoute,
+  discoveryRoute,
+  inboxRoute,
   productRoute,
   onboardingRoute,
   moderationRoute,

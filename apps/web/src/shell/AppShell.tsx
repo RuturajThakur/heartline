@@ -35,9 +35,23 @@ export function AppShell({ children }: PropsWithChildren) {
     queryKey: ["conversations"],
     queryFn: () =>
       apiFetch<{
-        items: Array<{ id: string; unreadCount: number }>;
+        items: Array<{
+          id: string;
+          matchId: string;
+          lastMessage: string | null;
+          lastMessageSenderUserId: string | null;
+          unreadCount: number;
+        }>;
         totalUnreadCount: number;
       }>("/api/conversations"),
+    enabled: sessionQuery.isSuccess
+  });
+  const matchesQuery = useQuery({
+    queryKey: ["matches"],
+    queryFn: () =>
+      apiFetch<{
+        items: Array<{ id: string }>;
+      }>("/api/matches"),
     enabled: sessionQuery.isSuccess
   });
   const incomingLikesQuery = useQuery({
@@ -45,8 +59,28 @@ export function AppShell({ children }: PropsWithChildren) {
     queryFn: () => apiFetch<{ items: Array<{ userId: string }> }>("/api/likes/incoming"),
     enabled: sessionQuery.isSuccess
   });
+  const conversationItems = Array.isArray(conversationsSummaryQuery.data?.items)
+    ? conversationsSummaryQuery.data.items
+    : [];
+  const matchItems = Array.isArray(matchesQuery.data?.items) ? matchesQuery.data.items : [];
+  const incomingLikeItems = Array.isArray(incomingLikesQuery.data?.items)
+    ? incomingLikesQuery.data.items
+    : [];
   const unreadCount = conversationsSummaryQuery.data?.totalUnreadCount ?? 0;
-  const incomingLikesCount = incomingLikesQuery.data?.items.length ?? 0;
+  const inboxPendingConversations =
+    conversationItems.filter(
+      (conversation) =>
+        Boolean(conversation.lastMessage) &&
+        conversation.lastMessageSenderUserId !== sessionQuery.data?.user.id
+    ).length ?? 0;
+  const pendingMatches =
+    matchItems.filter((match) => {
+      const conversationForMatch = conversationItems.find((conversation) => conversation.matchId === match.id);
+
+      return !conversationForMatch?.lastMessage;
+    }).length ?? 0;
+  const inboxBadgeCount = pendingMatches + inboxPendingConversations;
+  const incomingLikesCount = incomingLikeItems.length;
   const notificationsQuery = useQuery({
     queryKey: ["notifications"],
     queryFn: () => apiFetch<{ items: Array<{ id: string }>; unreadCount: number }>("/api/notifications"),
@@ -58,6 +92,7 @@ export function AppShell({ children }: PropsWithChildren) {
   const hasRestrictedAccount = accountStatus === "suspended" || accountStatus === "banned";
   const hasCompleteProfile = isProfileComplete(profileQuery.data ?? null);
   const isAdmin = sessionQuery.data?.user.role === "admin" && !hasRestrictedAccount;
+  const isHomePage = pathname === "/";
 
   useEffect(() => {
     if (!isSignedIn) {
@@ -87,6 +122,9 @@ export function AppShell({ children }: PropsWithChildren) {
       queryClient.invalidateQueries({
         queryKey: ["discovery-feed"]
       });
+      queryClient.invalidateQueries({
+        queryKey: ["saved-profiles"]
+      });
     }
 
     source.addEventListener("message", syncLiveData);
@@ -99,27 +137,22 @@ export function AppShell({ children }: PropsWithChildren) {
 
   return (
     <div className="mx-auto min-h-screen w-[min(1120px,calc(100%-32px))] py-8 pb-12">
-      <header className="mb-7 grid gap-5 border-b border-white/40 pb-6 md:grid-cols-[1fr_auto] md:items-end">
-        <div>
-          <p className="mb-2 text-[0.72rem] uppercase tracking-[0.14em] text-[#db5b43]">
-            Heartline
-          </p>
-          <h1 className="max-w-[10ch] font-serif text-[clamp(2.6rem,5vw,4.8rem)] leading-[0.98] text-[#24162d]">
-            Build a dating app with an actual social graph.
-          </h1>
-        </div>
+      <header
+        className={
+          isHomePage
+            ? "mb-7 flex justify-end"
+            : "mb-7 grid gap-5 border-b border-white/40 pb-6 md:grid-cols-[1fr_auto] md:items-end"
+        }
+      >
+        {!isHomePage ? (
+          <div>
+            <p className="mb-2 text-[0.72rem] uppercase tracking-[0.14em] text-[#db5b43]">
+              Heartline
+            </p>
+          </div>
+        ) : null}
 
         <nav className="grid gap-3 md:auto-cols-max md:grid-flow-col md:items-center">
-          <Link
-            className={
-              pathname === "/"
-                ? `${navLinkBase} border-[#24162d] bg-[#24162d] text-white shadow-[0_28px_70px_rgba(87,49,31,0.18)]`
-                : `${navLinkBase} bg-white/60 text-[#24162d]`
-            }
-            to="/"
-          >
-            Vision
-          </Link>
           {isSignedIn && !hasCompleteProfile && !hasRestrictedAccount ? (
             <Link
               className={
@@ -130,6 +163,18 @@ export function AppShell({ children }: PropsWithChildren) {
               to="/onboarding"
             >
               Onboarding
+            </Link>
+          ) : null}
+          {isSignedIn && hasCompleteProfile && !hasRestrictedAccount ? (
+            <Link
+              className={
+                pathname === "/discovery"
+                  ? `${navLinkBase} border-[#24162d] bg-[#24162d] text-white shadow-[0_28px_70px_rgba(87,49,31,0.18)]`
+                  : `${navLinkBase} bg-white/60 text-[#24162d]`
+              }
+              to="/discovery"
+            >
+              Discovery
             </Link>
           ) : null}
           {isSignedIn && hasCompleteProfile && !hasRestrictedAccount ? (
@@ -173,20 +218,32 @@ export function AppShell({ children }: PropsWithChildren) {
           {isSignedIn && hasCompleteProfile && !hasRestrictedAccount ? (
             <Link
               className={
+                pathname === "/inbox"
+                  ? `${navLinkBase} border-[#24162d] bg-[#24162d] text-white shadow-[0_28px_70px_rgba(87,49,31,0.18)]`
+                  : `${navLinkBase} bg-white/60 text-[#24162d]`
+              }
+              to="/inbox"
+            >
+              <span className="inline-flex items-center gap-2">
+                Inbox
+                {inboxBadgeCount > 0 ? (
+                  <span className="rounded-full bg-[#db5b43] px-2 py-0.5 text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-white">
+                    {inboxBadgeCount}
+                  </span>
+                ) : null}
+              </span>
+            </Link>
+          ) : null}
+          {isSignedIn && hasCompleteProfile && !hasRestrictedAccount ? (
+            <Link
+              className={
                 pathname === "/product"
                   ? `${navLinkBase} border-[#24162d] bg-[#24162d] text-white shadow-[0_28px_70px_rgba(87,49,31,0.18)]`
                   : `${navLinkBase} bg-white/60 text-[#24162d]`
               }
               to="/product"
             >
-              <span className="inline-flex items-center gap-2">
-                Product
-                {unreadCount > 0 ? (
-                  <span className="rounded-full bg-[#db5b43] px-2 py-0.5 text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-white">
-                    {unreadCount}
-                  </span>
-                ) : null}
-              </span>
+              Product
             </Link>
           ) : null}
           {isSignedIn ? (

@@ -27,4 +27,42 @@
   button {
     cursor: pointer;
   }
+
+  .heartline-range {
+    appearance: none;
+    background: transparent;
+    pointer-events: none;
+  }
+
+  .heartline-range::-webkit-slider-runnable-track {
+    height: 2px;
+    background: transparent;
+  }
+
+  .heartline-range::-webkit-slider-thumb {
+    appearance: none;
+    width: 22px;
+    height: 22px;
+    margin-top: -10px;
+    border-radius: 9999px;
+    border: 2px solid #fff7ee;
+    background: #db5b43;
+    box-shadow: 0 6px 18px rgba(219, 91, 67, 0.24);
+    pointer-events: auto;
+  }
+
+  .heartline-range::-moz-range-track {
+    height: 2px;
+    background: transparent;
+  }
+
+  .heartline-range::-moz-range-thumb {
+    width: 22px;
+    height: 22px;
+    border: 2px solid #fff7ee;
+    border-radius: 9999px;
+    background: #db5b43;
+    box-shadow: 0 6px 18px rgba(219, 91, 67, 0.24);
+    pointer-events: auto;
+  }
 }

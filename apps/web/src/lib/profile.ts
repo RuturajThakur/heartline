@@ -17,6 +17,8 @@ export type SessionUser = {
   name: string;
   birthDate: string;
   city: string;
+  latitude?: number | null;
+  longitude?: number | null;
   role: "user" | "admin";
   status?: "active" | "suspended" | "banned";
   createdAt: string;
@@ -25,7 +27,13 @@ export type SessionUser = {
 export const promptQuestions = [
   "A green flag I bring into a relationship is...",
   "My ideal Sunday looks like...",
-  "The kind of connection I want is..."
+  "The kind of connection I want is...",
+  "A tiny ritual that makes my day better is...",
+  "The fastest way to win me over is...",
+  "The last thing I got genuinely excited about was...",
+  "Something I want to do more of this year is...",
+  "I feel most connected when...",
+  "My perfect low-key date would be..."
 ];
 
 export const genderOptions = [
