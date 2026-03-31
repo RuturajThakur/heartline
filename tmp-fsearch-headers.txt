@@ -1,9 +1,0 @@
-HTTP/1.1 200 OK
-vary: Origin
-access-control-allow-credentials: true
-content-type: application/json; charset=utf-8
-content-length: 208
-Date: Mon, 30 Mar 2026 23:31:28 GMT
-Connection: keep-alive
-Keep-Alive: timeout=72
-

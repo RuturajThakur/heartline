@@ -1,9 +1,0 @@
-HTTP/1.1 400 Bad Request
-vary: Origin
-access-control-allow-credentials: true
-content-type: application/json; charset=utf-8
-content-length: 83
-Date: Mon, 30 Mar 2026 23:28:08 GMT
-Connection: keep-alive
-Keep-Alive: timeout=72
-

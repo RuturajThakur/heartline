@@ -1,1 +1,0 @@
-{"user":{"id":"b3ecbaa8-fd30-45b2-a38f-8e6e364b2e0a","email":"qa-c-1774912899@heartline.local","name":"QA Gamma","birthDate":"1997-07-07T00:00:00.000Z","city":"Pune","role":"user","status":"active","createdAt":"2026-03-30T23:21:45.239Z"}}

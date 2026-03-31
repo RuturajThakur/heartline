@@ -1,1 +1,0 @@
-{"items":[{"userId":"0a64125d-03fa-4a3a-b479-ea84cf47af52","createdAt":"2026-03-30T23:31:29.005Z","name":"Clean Alpha","age":30,"city":"Pune","bio":"I love good coffee, long walks, and building thoughtful products with people who care deeply.","relationshipIntent":"long_term","prompt":"No prompt answer yet.","tags":["coffee","travel","design"],"photoUrl":null}]}

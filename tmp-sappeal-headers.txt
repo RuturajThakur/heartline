@@ -1,9 +1,0 @@
-HTTP/1.1 401 Unauthorized
-vary: Origin
-access-control-allow-credentials: true
-content-type: application/json; charset=utf-8
-content-length: 32
-Date: Mon, 30 Mar 2026 23:31:58 GMT
-Connection: keep-alive
-Keep-Alive: timeout=72
-
