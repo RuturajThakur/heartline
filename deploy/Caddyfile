@@ -1,0 +1,22 @@
+{$SITE_HOST:localhost} {
+  encode gzip zstd
+
+  @api path /api/* /uploads/* /health /api/events
+  handle @api {
+    reverse_proxy api:3001
+  }
+
+  root * /srv
+  file_server
+
+  log {
+    output file /var/log/caddy/heartline-access.log {
+      roll_size 10MiB
+      roll_keep 10
+      roll_keep_for 720h
+    }
+    format json
+  }
+
+  tls {$TLS_EMAIL:admin@example.com}
+}

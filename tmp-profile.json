@@ -1,0 +1,23 @@
+﻿{
+    "interestedIn":  [
+                         "women"
+                     ],
+    "relationshipIntent":  "long_term",
+    "prompts":  [
+                    {
+                        "question":  "Ideal first date?",
+                        "answer":  "Coffee and a walk somewhere calm and easy."
+                    },
+                    {
+                        "question":  "Green flag?",
+                        "answer":  "Consistency, curiosity, and a relaxed sense of humor."
+                    }
+                ],
+    "gender":  "man",
+    "interests":  [
+                      "coffee",
+                      "music",
+                      "travel"
+                  ],
+    "bio":  "This is a valid test bio with more than twenty characters."
+}

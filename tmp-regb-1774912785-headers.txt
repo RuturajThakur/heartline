@@ -1,0 +1,11 @@
+HTTP/1.1 201 Created
+vary: Origin
+access-control-allow-credentials: true
+content-type: application/json; charset=utf-8
+set-cookie: heartline_token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1Yzk3MWQ4OC0zYTkwLTQzMWMtYjMwZi1hNDc1MzI4ZDhmMGQiLCJlbWFpbCI6InFhLWItMTc3NDkxMjc4NUBoZWFydGxpbmUubG9jYWwiLCJyb2xlIjoidXNlciIsInNlc3Npb25WZXJzaW9uIjoxLCJpYXQiOjE3NzQ5MTI3ODcsImV4cCI6MTc3NTUxNzU4N30.7aMa1HznTmzx6wyjyWtBa714aFIorcZzvoei_mK9VwM; Max-Age=604800; Path=/; HttpOnly; SameSite=Lax
+set-cookie: heartline_csrf=76400e6f-041b-4a9e-a187-2ed9e19bf149; Max-Age=604800; Path=/; SameSite=Lax
+content-length: 237
+Date: Mon, 30 Mar 2026 23:19:47 GMT
+Connection: keep-alive
+Keep-Alive: timeout=72
+

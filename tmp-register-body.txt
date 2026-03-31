@@ -1,0 +1,1 @@
+{"user":{"id":"35b5e72c-b7d2-4f20-89b1-4e0565c926ea","email":"curl-test-1774912693@heartline.local","name":"Curl Test","birthDate":"1995-05-05T00:00:00.000Z","city":"Pune","role":"user","status":"active","createdAt":"2026-03-30T23:18:15.319Z"}}

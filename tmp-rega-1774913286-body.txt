@@ -1,0 +1,1 @@
+{"user":{"id":"82bf537e-de7d-49c7-92ee-9d3e10113cab","email":"qa-a-1774913286@heartline.local","name":"QA Alpha","birthDate":"1995-05-05T00:00:00.000Z","city":"Pune","role":"user","status":"active","createdAt":"2026-03-30T23:28:08.877Z"}}

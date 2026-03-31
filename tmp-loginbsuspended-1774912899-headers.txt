@@ -1,0 +1,9 @@
+HTTP/1.1 403 Forbidden
+vary: Origin
+access-control-allow-credentials: true
+content-type: application/json; charset=utf-8
+content-length: 40
+Date: Mon, 30 Mar 2026 23:21:47 GMT
+Connection: keep-alive
+Keep-Alive: timeout=72
+

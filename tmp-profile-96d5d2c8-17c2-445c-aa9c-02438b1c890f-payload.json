@@ -1,0 +1,21 @@
+﻿{
+    "interestedIn":  "men",
+    "relationshipIntent":  "long_term",
+    "prompts":  [
+                    {
+                        "question":  "Best weekend vibe?",
+                        "answer":  "Brunch, a walk around the city, and an evening with close friends."
+                    },
+                    {
+                        "question":  "Green flag for you?",
+                        "answer":  "Someone who communicates clearly and follows through."
+                    }
+                ],
+    "gender":  "woman",
+    "interests":  [
+                      "books",
+                      "food",
+                      "music"
+                  ],
+    "bio":  "I enjoy bookstores, thoughtful dinners, and people who can make me laugh without trying too hard."
+}

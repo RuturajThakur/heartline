@@ -1,0 +1,1 @@
+{"user":{"id":"0a64125d-03fa-4a3a-b479-ea84cf47af52","email":"clean-a-1774913384@heartline.local","name":"Clean Alpha","birthDate":"1995-05-05T00:00:00.000Z","city":"Pune","role":"user","status":"active","createdAt":"2026-03-30T23:29:47.430Z"}}

@@ -1,0 +1,30 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    @apply min-h-screen text-[#24162d] antialiased;
+    margin: 0;
+    font-family: "Segoe UI Variable", "Trebuchet MS", sans-serif;
+    background:
+      radial-gradient(circle at top left, rgba(240, 177, 96, 0.38), transparent 25%),
+      radial-gradient(circle at top right, rgba(219, 91, 67, 0.22), transparent 24%),
+      linear-gradient(180deg, #fff7ee 0%, #f6eee1 55%, #efe0cf 100%);
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  button {
+    cursor: pointer;
+  }
+}

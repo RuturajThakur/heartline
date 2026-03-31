@@ -1,0 +1,1 @@
+{"user":{"id":"b1d30a6a-a1c4-4323-b3a3-f69ae5bf0f90","email":"ops-admin@heartline.local","name":"Heartline Admin","birthDate":"1990-01-01T00:00:00.000Z","city":"Admin City","role":"admin","status":"active","createdAt":"2026-03-30T23:11:41.438Z"}}

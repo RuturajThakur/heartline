@@ -1,0 +1,1 @@
+{"user":{"id":"5e05aeb6-0b4d-45b4-bf9c-a24a8653fe24","email":"appeal-fresh-1774913813@heartline.local","name":"Appeal Fresh","birthDate":"1995-05-05T00:00:00.000Z","city":"Pune","role":"user","status":"suspended","createdAt":"2026-03-30T23:36:57.476Z"}}
